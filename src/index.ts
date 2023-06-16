@@ -1,36 +1,44 @@
 import axios from 'axios';
 import express from 'express';
 
-interface ACMEPayload {
+export interface ACMEPayload {
     fqdn: string;
     value: string;
-    type: string;
+    type?: string;
 }
 
-function validateBody (body: ACMEPayload) {
-    if (!body.fqdn) throw new Error('Missing fqdn');
-    if (!body.value) throw new Error('Missing value');
+export function validateBody (body: ACMEPayload) {
+    if (!('fqdn' in body)) throw new Error('Missing fqdn');
+    if (!('value' in body)) throw new Error('Missing value');
 }
-function sanitizeBody (body: ACMEPayload) {
-    body.type = body.type || 'txt';
 
-    if (!body.fqdn.endsWith(process.env.MIAB_DOMAIN!) && !body.fqdn.endsWith(process.env.MIAB_DOMAIN! + '.')) {
-        if (!body.fqdn.endsWith('.')) body.fqdn += '.';
-        body.fqdn += process.env.MIAB_DOMAIN!;
+export function sanitizeBody (body: ACMEPayload) {
+    const type = body.type ?? 'txt';
+    let fqdn = body.fqdn;
+    if (!fqdn.endsWith(process.env.MIAB_DOMAIN!) && !fqdn.endsWith(process.env.MIAB_DOMAIN! + '.')) {
+        if (!fqdn.endsWith('.')) fqdn += '.';
+        fqdn = fqdn + process.env.MIAB_DOMAIN!;
     }
 
-    if (body.fqdn.endsWith('.')) {
-        body.fqdn = body.fqdn.slice(0, -1);
+    if (fqdn.endsWith('.')) {
+        fqdn = fqdn.slice(0, -1);
     }
+
+    return {
+        ...body,
+        type,
+        fqdn,
+    };
 }
 
 
-function buildUrl (body: ACMEPayload): string {
-    return `/admin/dns/custom/${body.fqdn}/${body.type.toLowerCase()}`;
+export function buildUrl ({ fqdn, type }: Omit<ACMEPayload, 'value'>): string {
+    return `/admin/dns/custom/${fqdn}${type ? '/' + type.toLowerCase() : ''}`;
 }
 
 const {
     post,
+    put,
     delete: del,
 } = axios.create({
     baseURL: process.env.MIAB_URL,
@@ -79,9 +87,7 @@ app.use((req, res, next) => {
 });
 
 app.post('/present', async (req, res) => {
-    const body: ACMEPayload = req.body;
-
-    sanitizeBody(body);
+    const body: ACMEPayload = sanitizeBody(req.body);
 
     const { data } = await post(buildUrl(body), body.value);
 
@@ -89,11 +95,17 @@ app.post('/present', async (req, res) => {
 });
 
 app.post('/cleanup', async (req, res) => {
-    const body: ACMEPayload = req.body;
-
-    sanitizeBody(body);
+    const body: ACMEPayload = sanitizeBody(req.body);
 
     const { data } = await del(buildUrl(body));
+
+    res.json(data);
+});
+
+app.post('/sync', async (req, res) => {
+    const body: ACMEPayload = sanitizeBody(req.body);
+
+    const { data } = await put(buildUrl({ fqdn: body.fqdn }));
 
     res.json(data);
 });
