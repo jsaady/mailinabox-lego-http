@@ -14,9 +14,13 @@ function validateBody (body: ACMEPayload) {
 function sanitizeBody (body: ACMEPayload) {
     body.type = body.type || 'txt';
 
-    if (!body.fqdn.endsWith(process.env.MIAB_DOMAIN!)) {
+    if (!body.fqdn.endsWith(process.env.MIAB_DOMAIN!) && !body.fqdn.endsWith(process.env.MIAB_DOMAIN! + '.')) {
         if (!body.fqdn.endsWith('.')) body.fqdn += '.';
         body.fqdn += process.env.MIAB_DOMAIN!;
+    }
+
+    if (body.fqdn.endsWith('.')) {
+        body.fqdn = body.fqdn.slice(0, -1);
     }
 }
 
